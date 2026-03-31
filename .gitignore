@@ -25,6 +25,9 @@ yarn-error.log*
 # Java build output
 target/
 
+# Test data files
+ACH-*.txt
+
 # Eclipse IDE files
 .classpath
 .project

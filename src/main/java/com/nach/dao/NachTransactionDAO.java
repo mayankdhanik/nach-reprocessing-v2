@@ -111,16 +111,66 @@ public class NachTransactionDAO {
     }
 
     public boolean updateTransactionStatus(Long id, String status) {
+        String oldStatus = null;
+        String txnRefNo = null;
+        String selectSql = "SELECT STATUS, TXN_REF_NO FROM NACH_TRANSACTIONS WHERE ID = ?";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(selectSql)) {
+            ps.setLong(1, id);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    oldStatus = rs.getString("STATUS");
+                    txnRefNo = rs.getString("TXN_REF_NO");
+                }
+            }
+        } catch (SQLException e) {
+            logger.error("Failed to fetch old status for id: {}", id, e);
+        }
+
         String sql = "UPDATE NACH_TRANSACTIONS SET STATUS=?, ERROR_CODE=NULL, ERROR_DESC=NULL, UPDATED_DATE=? WHERE ID=?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status);
             ps.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
             ps.setLong(3, id);
-            return ps.executeUpdate() > 0;
+            boolean updated = ps.executeUpdate() > 0;
+            if (updated) insertReprocessAudit(id, txnRefNo, oldStatus, status);
+            return updated;
         } catch (SQLException e) {
             logger.error("updateTransactionStatus failed for id: {}", id, e);
             return false;
+        }
+    }
+
+    private void insertReprocessAudit(Long txnId, String txnRefNo, String oldStatus, String newStatus) {
+        String sql = "INSERT INTO NACH_REPROCESS_AUDIT (TRANSACTION_ID, TXN_REF_NO, OLD_STATUS, NEW_STATUS, REPROCESS_DATE, REMARKS) VALUES (?,?,?,?,?,?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, txnId);
+            ps.setString(2, txnRefNo);
+            ps.setString(3, oldStatus);
+            ps.setString(4, newStatus);
+            ps.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
+            ps.setString(6, "Reprocessed via NACH system");
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("insertReprocessAudit failed for txnId: {}", txnId, e);
+        }
+    }
+
+    public void insertFileUploadAudit(String fileName, String fileType, int totalCount, int successCount, int duplicateCount) {
+        String sql = "INSERT INTO NACH_FILE_UPLOADS (FILE_NAME, FILE_TYPE, UPLOAD_DATE, TOTAL_COUNT, SUCCESS_COUNT, DUPLICATE_COUNT) VALUES (?,?,?,?,?,?)";
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, fileName);
+            ps.setString(2, fileType);
+            ps.setTimestamp(3, new Timestamp(System.currentTimeMillis()));
+            ps.setInt(4, totalCount);
+            ps.setInt(5, successCount);
+            ps.setInt(6, duplicateCount);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            logger.error("insertFileUploadAudit failed for file: {}", fileName, e);
         }
     }
 

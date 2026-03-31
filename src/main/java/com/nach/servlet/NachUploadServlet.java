@@ -53,16 +53,25 @@ public class NachUploadServlet extends HttpServlet {
             
             // Save transactions to database
             int successCount = 0;
+            int duplicateCount = 0;
             for (NachTransaction transaction : transactions) {
                 if (transactionDAO.insertTransaction(transaction)) {
                     successCount++;
+                } else {
+                    duplicateCount++;
                 }
             }
-            
+
+            // Detect file type from file name
+            String fileType = fileName.toUpperCase().contains("-CR-") ? "CR" : "DR";
+
+            // Log upload audit
+            transactionDAO.insertFileUploadAudit(fileName, fileType, transactions.size(), successCount, duplicateCount);
+
             response.setStatus(HttpServletResponse.SC_OK);
             out.write(String.format(
-                "{\"message\": \"File processed successfully\", \"transactionCount\": %d, \"successCount\": %d}",
-                transactions.size(), successCount));
+                "{\"message\": \"File processed successfully\", \"transactionCount\": %d, \"successCount\": %d, \"duplicateCount\": %d}",
+                transactions.size(), successCount, duplicateCount));
                 
         } catch (Exception e) {
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);

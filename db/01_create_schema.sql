@@ -4,7 +4,7 @@
 -- ============================================================
 
 -- Create new schema user
-CREATE USER nach_user IDENTIFIED BY Nach@1234
+CREATE USER nach_user IDENTIFIED BY "Nach@1234"
   DEFAULT TABLESPACE USERS
   TEMPORARY TABLESPACE TEMP
   QUOTA UNLIMITED ON USERS;
