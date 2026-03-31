@@ -60,8 +60,8 @@ public class NachTransactionServlet extends HttpServlet {
             NachTransaction t = transactions.get(i);
             if (i > 0) sb.append(",");
             sb.append("{")
-                .append("\"id\":\"").append(esc(t.getMsgId())).append("\",")
-                .append("\"msgId\":\"").append(esc(t.getMsgId())).append("\",")
+                .append("\"id\":\"").append(esc(t.getTxnId())).append("\",")
+                .append("\"txnId\":\"").append(esc(t.getTxnId())).append("\",")
                 .append("\"txnRefNo\":\"").append(esc(t.getTxnRefNo())).append("\",")
                 .append("\"mandateId\":\"").append(esc(t.getMandateId())).append("\",")
                 .append("\"fileName\":\"").append(esc(t.getFileName())).append("\",")

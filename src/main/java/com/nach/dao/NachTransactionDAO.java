@@ -13,7 +13,6 @@ public class NachTransactionDAO {
 
     private static final Logger logger = LoggerFactory.getLogger(NachTransactionDAO.class);
 
-    // Non-reprocessable error codes (business errors)
     private static final java.util.Set<String> NON_REPROCESSABLE_CODES = new java.util.HashSet<>(
         java.util.Arrays.asList("E001", "E003", "E004", "E005", "E010", "E011")
     );
@@ -21,13 +20,13 @@ public class NachTransactionDAO {
         java.util.Arrays.asList("insufficient", "invalid account", "duplicate", "invalid mandate", "account closed", "blocked")
     );
 
-    // Generate MSG_ID like MSG1000000000000001
-    private String generateMsgId(Connection conn) throws SQLException {
+    // Generate TXN_ID like TXN1000000000000001
+    private String generateTxnId(Connection conn) throws SQLException {
         try (Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery("SELECT 'MSG' || NACH_MSG_SEQ.NEXTVAL AS MSG_ID FROM DUAL")) {
-            if (rs.next()) return rs.getString("MSG_ID");
+             ResultSet rs = stmt.executeQuery("SELECT 'TXN' || NACH_TXN_SEQ.NEXTVAL AS TXN_ID FROM DUAL")) {
+            if (rs.next()) return rs.getString("TXN_ID");
         }
-        throw new SQLException("Failed to generate MSG_ID from sequence");
+        throw new SQLException("Failed to generate TXN_ID from sequence");
     }
 
     public boolean isReprocessable(NachTransaction t) {
@@ -65,11 +64,11 @@ public class NachTransactionDAO {
         return files;
     }
 
-    public List<NachTransaction> getTransactionsByMsgIds(List<String> msgIds) {
-        if (msgIds == null || msgIds.isEmpty()) return new ArrayList<>();
-        String placeholders = String.join(",", msgIds.stream().map(id -> "?").toArray(String[]::new));
-        return queryList("SELECT * FROM NACH_TRANSACTIONS WHERE MSG_ID IN (" + placeholders + ")",
-            ps -> { for (int i = 0; i < msgIds.size(); i++) ps.setString(i + 1, msgIds.get(i)); });
+    public List<NachTransaction> getTransactionsByTxnIds(List<String> txnIds) {
+        if (txnIds == null || txnIds.isEmpty()) return new ArrayList<>();
+        String placeholders = String.join(",", txnIds.stream().map(id -> "?").toArray(String[]::new));
+        return queryList("SELECT * FROM NACH_TRANSACTIONS WHERE TXN_ID IN (" + placeholders + ")",
+            ps -> { for (int i = 0; i < txnIds.size(); i++) ps.setString(i + 1, txnIds.get(i)); });
     }
 
     public boolean transactionExists(String txnRefNo) {
@@ -92,12 +91,12 @@ public class NachTransactionDAO {
             return false;
         }
         String sql = "INSERT INTO NACH_TRANSACTIONS " +
-                "(MSG_ID,TXN_REF_NO,MANDATE_ID,FILE_NAME,ACCOUNT_NO,AMOUNT,STATUS,ERROR_CODE,ERROR_DESC,BATCH_NO,FILE_TYPE,PROCESSED_DATE) " +
+                "(TXN_ID,TXN_REF_NO,MANDATE_ID,FILE_NAME,ACCOUNT_NO,AMOUNT,STATUS,ERROR_CODE,ERROR_DESC,BATCH_NO,FILE_TYPE,PROCESSED_DATE) " +
                 "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            String msgId = generateMsgId(conn);
-            ps.setString(1, msgId);
+            String txnId = generateTxnId(conn);
+            ps.setString(1, txnId);
             ps.setString(2, t.getTxnRefNo());
             ps.setString(3, t.getMandateId());
             ps.setString(4, t.getFileName());
@@ -110,7 +109,7 @@ public class NachTransactionDAO {
             ps.setString(11, t.getFileType());
             ps.setTimestamp(12, new Timestamp(System.currentTimeMillis()));
             ps.executeUpdate();
-            t.setMsgId(msgId);
+            t.setTxnId(txnId);
             return true;
         } catch (SQLException e) {
             logger.error("insertTransaction failed for: {}", t.getTxnRefNo(), e);
@@ -118,14 +117,14 @@ public class NachTransactionDAO {
         }
     }
 
-    public boolean updateTransactionStatus(String msgId, String status) {
+    public boolean updateTransactionStatus(String txnId, String status) {
         String oldStatus = null;
         String txnRefNo = null;
         String fileName = null;
-        String selectSql = "SELECT STATUS, TXN_REF_NO, FILE_NAME FROM NACH_TRANSACTIONS WHERE MSG_ID = ?";
+        String selectSql = "SELECT STATUS, TXN_REF_NO, FILE_NAME FROM NACH_TRANSACTIONS WHERE TXN_ID = ?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(selectSql)) {
-            ps.setString(1, msgId);
+            ps.setString(1, txnId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     oldStatus = rs.getString("STATUS");
@@ -134,47 +133,46 @@ public class NachTransactionDAO {
                 }
             }
         } catch (SQLException e) {
-            logger.error("Failed to fetch old status for msgId: {}", msgId, e);
+            logger.error("Failed to fetch old status for txnId: {}", txnId, e);
         }
 
-        String sql = "UPDATE NACH_TRANSACTIONS SET STATUS=?, ERROR_CODE=NULL, ERROR_DESC=NULL, UPDATED_DATE=? WHERE MSG_ID=?";
+        String sql = "UPDATE NACH_TRANSACTIONS SET STATUS=?, ERROR_CODE=NULL, ERROR_DESC=NULL, UPDATED_DATE=? WHERE TXN_ID=?";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, status);
             ps.setTimestamp(2, new Timestamp(System.currentTimeMillis()));
-            ps.setString(3, msgId);
+            ps.setString(3, txnId);
             boolean updated = ps.executeUpdate() > 0;
-            if (updated) insertReprocessAudit(msgId, txnRefNo, fileName, oldStatus, status);
+            if (updated) insertReprocessAudit(txnId, txnRefNo, fileName, oldStatus, status);
             return updated;
         } catch (SQLException e) {
-            logger.error("updateTransactionStatus failed for msgId: {}", msgId, e);
+            logger.error("updateTransactionStatus failed for txnId: {}", txnId, e);
             return false;
         }
     }
 
-    private void insertReprocessAudit(String txnMsgId, String txnRefNo, String fileName, String oldStatus, String newStatus) {
-        String sql = "INSERT INTO NACH_REPROCESS_AUDIT (MSG_ID, TXN_MSG_ID, TXN_REF_NO, FILE_NAME, OLD_STATUS, NEW_STATUS, REPROCESS_DATE, REMARKS) VALUES (?,?,?,?,?,?,?,?)";
+    private void insertReprocessAudit(String txnId, String txnRefNo, String fileName, String oldStatus, String newStatus) {
+        String sql = "INSERT INTO NACH_REPROCESS_AUDIT (TXN_ID, TXN_REF_NO, FILE_NAME, OLD_STATUS, NEW_STATUS, REPROCESS_DATE, REMARKS) VALUES (?,?,?,?,?,?,?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, generateMsgId(conn));
-            ps.setString(2, txnMsgId);
-            ps.setString(3, txnRefNo);
-            ps.setString(4, fileName);
-            ps.setString(5, oldStatus);
-            ps.setString(6, newStatus);
-            ps.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
-            ps.setString(8, "Reprocessed via NACH system");
+            ps.setString(1, txnId);
+            ps.setString(2, txnRefNo);
+            ps.setString(3, fileName);
+            ps.setString(4, oldStatus);
+            ps.setString(5, newStatus);
+            ps.setTimestamp(6, new Timestamp(System.currentTimeMillis()));
+            ps.setString(7, "Reprocessed via NACH system");
             ps.executeUpdate();
         } catch (SQLException e) {
-            logger.error("insertReprocessAudit failed for txnMsgId: {}", txnMsgId, e);
+            logger.error("insertReprocessAudit failed for txnId: {}", txnId, e);
         }
     }
 
     public void insertFileUploadAudit(String fileName, String fileType, int totalCount, int successCount, int duplicateCount) {
-        String sql = "INSERT INTO NACH_FILE_UPLOADS (MSG_ID, FILE_NAME, FILE_TYPE, UPLOAD_DATE, TOTAL_COUNT, SUCCESS_COUNT, DUPLICATE_COUNT) VALUES (?,?,?,?,?,?,?)";
+        String sql = "INSERT INTO NACH_FILE_UPLOADS (TXN_ID, FILE_NAME, FILE_TYPE, UPLOAD_DATE, TOTAL_COUNT, SUCCESS_COUNT, DUPLICATE_COUNT) VALUES (?,?,?,?,?,?,?)";
         try (Connection conn = DatabaseConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setString(1, generateMsgId(conn));
+            ps.setString(1, generateTxnId(conn));
             ps.setString(2, fileName);
             ps.setString(3, fileType);
             ps.setTimestamp(4, new Timestamp(System.currentTimeMillis()));
@@ -206,7 +204,7 @@ public class NachTransactionDAO {
 
     private NachTransaction map(ResultSet rs) throws SQLException {
         NachTransaction t = new NachTransaction();
-        t.setMsgId(rs.getString("MSG_ID"));
+        t.setTxnId(rs.getString("TXN_ID"));
         t.setTxnRefNo(rs.getString("TXN_REF_NO"));
         t.setMandateId(rs.getString("MANDATE_ID"));
         t.setFileName(rs.getString("FILE_NAME"));

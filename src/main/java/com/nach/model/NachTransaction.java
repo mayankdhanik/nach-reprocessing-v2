@@ -7,7 +7,7 @@ import java.util.Date;
  * Model class representing a NACH transaction
  */
 public class NachTransaction {
-    private String msgId;
+    private String txnId;
     private Long id; // kept for backward compat
     private String txnRefNo;
     private String mandateId;
@@ -55,8 +55,8 @@ public class NachTransaction {
     }
     
     // Getters and Setters
-    public String getMsgId() { return msgId; }
-    public void setMsgId(String msgId) { this.msgId = msgId; }
+    public String getTxnId() { return txnId; }
+    public void setTxnId(String txnId) { this.txnId = txnId; }
 
     public Long getId() {
         return id;

@@ -32,14 +32,14 @@ public class NachReprocessServlet extends HttpServlet {
             String line;
             while ((line = reader.readLine()) != null) sb.append(line);
 
-            List<String> msgIds = parseMsgIds(sb.toString());
-            if (msgIds.isEmpty()) {
+            List<String> txnIds = parseTxnIds(sb.toString());
+            if (txnIds.isEmpty()) {
                 response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 out.write("{\"error\": \"No transaction IDs provided\"}");
                 return;
             }
 
-            List<NachTransaction> transactions = transactionDAO.getTransactionsByMsgIds(msgIds);
+            List<NachTransaction> transactions = transactionDAO.getTransactionsByTxnIds(txnIds);
 
             int success = 0, skipped = 0;
             for (NachTransaction t : transactions) {
@@ -47,7 +47,7 @@ public class NachReprocessServlet extends HttpServlet {
                     skipped++;
                     continue;
                 }
-                transactionDAO.updateTransactionStatus(t.getMsgId(), "REPROCESSED");
+                transactionDAO.updateTransactionStatus(t.getTxnId(), "REPROCESSED");
                 success++;
             }
 
@@ -61,7 +61,7 @@ public class NachReprocessServlet extends HttpServlet {
         }
     }
 
-    private List<String> parseMsgIds(String json) {
+    private List<String> parseTxnIds(String json) {
         List<String> ids = new ArrayList<>();
         Matcher m = Pattern.compile("\"transactionIds\"\\s*:\\s*\\[(.*?)\\]").matcher(json);
         if (m.find()) {
