@@ -32,14 +32,14 @@ public class NachReprocessServlet extends HttpServlet {
             String line;
             while ((line = reader.readLine()) != null) sb.append(line);
 
-            List<Long> ids = parseIds(sb.toString());
-            if (ids.isEmpty()) {
+            List<String> msgIds = parseMsgIds(sb.toString());
+            if (msgIds.isEmpty()) {
                 response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
                 out.write("{\"error\": \"No transaction IDs provided\"}");
                 return;
             }
 
-            List<NachTransaction> transactions = transactionDAO.getTransactionsByIds(ids);
+            List<NachTransaction> transactions = transactionDAO.getTransactionsByMsgIds(msgIds);
 
             int success = 0, skipped = 0;
             for (NachTransaction t : transactions) {
@@ -47,7 +47,7 @@ public class NachReprocessServlet extends HttpServlet {
                     skipped++;
                     continue;
                 }
-                transactionDAO.updateTransactionStatus(t.getId(), "REPROCESSED");
+                transactionDAO.updateTransactionStatus(t.getMsgId(), "REPROCESSED");
                 success++;
             }
 
@@ -61,12 +61,13 @@ public class NachReprocessServlet extends HttpServlet {
         }
     }
 
-    private List<Long> parseIds(String json) {
-        List<Long> ids = new ArrayList<>();
+    private List<String> parseMsgIds(String json) {
+        List<String> ids = new ArrayList<>();
         Matcher m = Pattern.compile("\"transactionIds\"\\s*:\\s*\\[(.*?)\\]").matcher(json);
         if (m.find()) {
             for (String id : m.group(1).split(",")) {
-                try { ids.add(Long.parseLong(id.trim())); } catch (NumberFormatException ignored) {}
+                String cleaned = id.trim().replace("\"", "");
+                if (!cleaned.isEmpty()) ids.add(cleaned);
             }
         }
         return ids;
