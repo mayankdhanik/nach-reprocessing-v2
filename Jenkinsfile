@@ -7,12 +7,8 @@ pipeline {
     }
 
     environment {
-        WEBLOGIC_HOST    = 'weblogic-nach'
-        WEBLOGIC_PORT    = '7001'
-        WEBLOGIC_USER    = 'weblogic'
-        WEBLOGIC_PASS    = 'Welcome@1234'
-        APP_NAME         = 'nach-reprocessing'
-        WAR_FILE         = 'target/nach-reprocessing.war'
+        APP_NAME = 'nach-reprocessing'
+        WAR_FILE = 'target/nach-reprocessing.war'
     }
 
     stages {
@@ -45,29 +41,18 @@ pipeline {
 
         stage('Deploy WAR to WebLogic') {
             steps {
-                echo '=== Deploying WAR to WebLogic ==='
-                sh """
-                    curl -s -X POST \
-                    --user ${WEBLOGIC_USER}:${WEBLOGIC_PASS} \
-                    -H 'Content-Type: application/octet-stream' \
-                    -H 'X-Requested-By: Jenkins' \
-                    --data-binary @${WAR_FILE} \
-                    "http://${WEBLOGIC_HOST}:${WEBLOGIC_PORT}/management/weblogic/latest/domainRuntime/deploymentManager/deployments" \
-                    -o deploy_response.json
-                """
-                sh 'cat deploy_response.json'
-                echo '=== WAR deployed to WebLogic ==='
+                echo '=== Copying WAR to WebLogic autodeploy folder ==='
+                sh 'docker cp ${WAR_FILE} weblogic-nach:/u01/oracle/user_projects/domains/NachDomain/autodeploy/'
+                echo '=== WAR copied to WebLogic autodeploy ==='
             }
         }
 
         stage('Verify Deployment') {
             steps {
-                echo '=== Checking deployment status ==='
-                sh """
-                    curl -s --user ${WEBLOGIC_USER}:${WEBLOGIC_PASS} \
-                    "http://${WEBLOGIC_HOST}:${WEBLOGIC_PORT}/management/weblogic/latest/domainRuntime/deploymentManager/deployments/${APP_NAME}" \
-                    | grep -o '"state":"[^"]*"' || echo 'Deployment check complete'
-                """
+                echo '=== Waiting for WebLogic to deploy ==='
+                sh 'sleep 15'
+                sh 'docker exec weblogic-nach ls /u01/oracle/user_projects/domains/NachDomain/autodeploy/'
+                echo '=== Deployment complete ==='
             }
         }
     }
