@@ -51,16 +51,14 @@ pipeline {
             steps {
                 echo '=== Stopping old Nginx container if exists ==='
                 sh 'docker rm -f nach-frontend 2>/dev/null || true'
-                echo '=== Starting Nginx container with React build ==='
-                sh '''
-                    docker run -d \
-                        --name nach-frontend \
-                        --network nach-network \
-                        -p 80:80 \
-                        -v $(pwd)/build:/usr/share/nginx/html:ro \
-                        -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf:ro \
-                        nginx:alpine
-                '''
+                echo '=== Starting Nginx container ==='
+                sh 'docker run -d --name nach-frontend --network nach-network -p 80:80 nginx:alpine'
+                echo '=== Copying React build files into Nginx ==='
+                sh 'docker cp build/. nach-frontend:/usr/share/nginx/html/'
+                echo '=== Copying Nginx config ==='
+                sh 'docker cp nginx.conf nach-frontend:/etc/nginx/conf.d/default.conf'
+                echo '=== Reloading Nginx ==='
+                sh 'docker exec nach-frontend nginx -s reload'
                 echo '=== Nginx frontend started on port 80 ==='
             }
         }
