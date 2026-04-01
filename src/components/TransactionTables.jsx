@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { formatCurrency, formatDateShort, getStatusColorClass, getFileTypeBadgeColor, copyToClipboard, downloadCSV } from "../utils/helpers";
+import { formatCurrency, formatDateShort, getStatusColorClass, copyToClipboard, downloadCSV } from "../utils/helpers";
 
 const TransactionTable = ({ transactions, selectedTransactions, onTransactionSelect, onSelectAll, onSort, sortConfig, loading }) => {
   const [copiedField, setCopiedField] = useState(null);
